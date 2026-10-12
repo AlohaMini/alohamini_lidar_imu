@@ -21,8 +21,6 @@ install(
   PROGRAMS
     scripts/alohamini_mapping_session
     scripts/scan_sector_filter
-    scripts/wait_for_clock_sync
-    scripts/start_microros_agent_after_time_sync
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -30,5 +28,10 @@ install(
   TARGETS head_camera_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(c1_alignment test/test_c1_alignment.py)
+endif()
 
 ament_package()

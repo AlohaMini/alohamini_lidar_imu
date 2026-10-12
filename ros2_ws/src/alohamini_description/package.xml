@@ -2,7 +2,7 @@
 <package format="3">
   <name>alohamini_description</name>
   <version>0.1.0</version>
-  <description>AlohaMini robot description for lidar/IMU navigation bringup.</description>
+  <description>AlohaMini robot description for C1 lidar navigation bringup.</description>
   <maintainer email="todo@example.com">AlohaMini</maintainer>
   <license>BSD-3-Clause</license>
 

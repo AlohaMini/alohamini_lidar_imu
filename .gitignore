@@ -5,9 +5,6 @@
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
-firmware/lidar_imu_publisher/build
-firmware/lidar_imu_publisher/install
-firmware/lidar_imu_publisher/log
 
 # Python caches
 __pycache__/
@@ -18,9 +15,3 @@ ros2_ws/maps/
 *.log
 
 # caches
-firmware/lidar_imu_publisher/sdkconfig
-firmware/lidar_imu_publisher/sdkconfig.old
-
-# Three-party dependency construction
-extra_components/micro_ros_espidf_component/include
-extra_components/micro_ros_espidf_component/libmicroros.a

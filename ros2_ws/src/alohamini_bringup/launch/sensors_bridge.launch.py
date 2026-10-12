@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -32,6 +32,13 @@ def generate_launch_description():
     require_observation_for_motion = LaunchConfiguration("require_observation_for_motion")
     use_commanded_yaw_for_odom = LaunchConfiguration("use_commanded_yaw_for_odom")
     commanded_yaw_odom_scale = LaunchConfiguration("commanded_yaw_odom_scale")
+    lidar_serial_port = LaunchConfiguration("lidar_serial_port")
+    lidar_serial_baudrate = LaunchConfiguration("lidar_serial_baudrate")
+    lidar_frame_id = LaunchConfiguration("lidar_frame_id")
+    lidar_scan_mode = LaunchConfiguration("lidar_scan_mode")
+    lidar_scan_frequency = LaunchConfiguration("lidar_scan_frequency")
+    lidar_inverted = LaunchConfiguration("lidar_inverted")
+    lidar_angle_compensate = LaunchConfiguration("lidar_angle_compensate")
     scan_input_topic = LaunchConfiguration("scan_input_topic")
     scan_topic = LaunchConfiguration("scan_topic")
     scan_min_angle = LaunchConfiguration("scan_min_angle")
@@ -56,6 +63,9 @@ def generate_launch_description():
     )
     head_camera_launch = PathJoinSubstitution(
         [FindPackageShare("alohamini_bringup"), "launch", "head_camera.launch.py"]
+    )
+    lidar_launch = PathJoinSubstitution(
+        [FindPackageShare("alohamini_rplidar_c1"), "launch", "rplidar_c1.launch.py"]
     )
     default_ekf_params = PathJoinSubstitution(
         [FindPackageShare("alohamini_bringup"), "config", "ekf.yaml"]
@@ -126,17 +136,24 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("use_commanded_yaw_for_odom", default_value="false"),
             DeclareLaunchArgument("commanded_yaw_odom_scale", default_value="1.0"),
+            DeclareLaunchArgument("lidar_serial_port", default_value="/dev/ttyUSB0"),
+            DeclareLaunchArgument("lidar_serial_baudrate", default_value="460800"),
+            DeclareLaunchArgument("lidar_frame_id", default_value="laser_frame"),
+            DeclareLaunchArgument("lidar_scan_mode", default_value="Standard"),
+            DeclareLaunchArgument("lidar_scan_frequency", default_value="10.0"),
+            DeclareLaunchArgument("lidar_inverted", default_value="false"),
+            DeclareLaunchArgument("lidar_angle_compensate", default_value="true"),
             DeclareLaunchArgument("scan_input_topic", default_value="/scan"),
             DeclareLaunchArgument("scan_topic", default_value="/scan_filtered"),
             DeclareLaunchArgument(
                 "scan_min_angle",
-                default_value="-3.14159265359",
-                description="Minimum scan angle to keep in radians; default keeps the physical front sector.",
+                default_value="1.5707963267948966",
+                description="Front sector start for rear-cable C1; min > max wraps across +/-pi.",
             ),
             DeclareLaunchArgument(
                 "scan_max_angle",
-                default_value="0.0",
-                description="Maximum scan angle to keep in radians; default keeps the physical front sector.",
+                default_value="-1.5707963267948966",
+                description="Front sector end for rear-cable C1; min > max wraps across +/-pi.",
             ),
             DeclareLaunchArgument("scan_max_age_sec", default_value="0.5"),
             DeclareLaunchArgument("scan_max_future_stamp_sec", default_value="0.2"),
@@ -167,6 +184,23 @@ def generate_launch_description():
                     "height": head_camera_height,
                     "jpeg_quality": head_camera_jpeg_quality,
                 }.items(),
+            ),
+            # Isolate the child's raw scan_topic from this launch's filtered output.
+            GroupAction(
+                scoped=True,
+                actions=[IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(lidar_launch),
+                    launch_arguments={
+                        "serial_port": lidar_serial_port,
+                        "serial_baudrate": lidar_serial_baudrate,
+                        "frame_id": lidar_frame_id,
+                        "scan_topic": scan_input_topic,
+                        "scan_mode": lidar_scan_mode,
+                        "scan_frequency": lidar_scan_frequency,
+                        "inverted": lidar_inverted,
+                        "angle_compensate": lidar_angle_compensate,
+                    }.items(),
+                )],
             ),
             Node(
                 package="tf2_ros",

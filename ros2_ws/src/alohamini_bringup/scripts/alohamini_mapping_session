@@ -76,13 +76,19 @@ def build_mapping_command(args: argparse.Namespace) -> list[str]:
             f"baud_rate:={args.baud_rate}",
             f"use_mock_hardware:={str_bool(args.use_mock_hardware)}",
             f"base_yaw_deg:={args.base_yaw_deg}",
+            f"lidar_serial_port:={args.lidar_serial_port}",
+            f"lidar_serial_baudrate:={args.lidar_serial_baudrate}",
+            f"lidar_frame_id:={args.lidar_frame_id}",
+            f"lidar_scan_mode:={args.lidar_scan_mode}",
+            f"lidar_scan_frequency:={args.lidar_scan_frequency}",
+            f"lidar_inverted:={str_bool(args.lidar_inverted)}",
+            f"lidar_angle_compensate:={str_bool(args.lidar_angle_compensate)}",
             f"enable_head_camera:={str_bool(args.enable_head_camera)}",
             f"head_camera_device:={args.head_camera_device}",
             f"head_camera_fps:={args.head_camera_fps}",
             f"head_camera_width:={args.head_camera_width}",
             f"head_camera_height:={args.head_camera_height}",
             f"head_camera_jpeg_quality:={args.head_camera_jpeg_quality}",
-            f"wait_for_time_sync:={str_bool(not args.no_wait_for_time_sync)}",
         ]
         if args.slam_params_file:
             cmd.append(f"slam_params_file:={args.slam_params_file}")
@@ -97,6 +103,13 @@ def build_mapping_command(args: argparse.Namespace) -> list[str]:
         f"cmd_port:={args.cmd_port}",
         f"obs_port:={args.obs_port}",
         f"use_joint_state_publisher:={str_bool(args.use_joint_state_publisher)}",
+        f"lidar_serial_port:={args.lidar_serial_port}",
+        f"lidar_serial_baudrate:={args.lidar_serial_baudrate}",
+        f"lidar_frame_id:={args.lidar_frame_id}",
+        f"lidar_scan_mode:={args.lidar_scan_mode}",
+        f"lidar_scan_frequency:={args.lidar_scan_frequency}",
+        f"lidar_inverted:={str_bool(args.lidar_inverted)}",
+        f"lidar_angle_compensate:={str_bool(args.lidar_angle_compensate)}",
         f"linear_x_scale:={args.linear_x_scale}",
         f"linear_y_scale:={args.linear_y_scale}",
         f"angular_z_scale:={args.angular_z_scale}",
@@ -238,6 +251,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--serial-port", default="/dev/ttyACM0", help="ros2_control base serial port")
     parser.add_argument("--baud-rate", default="1000000", help="ros2_control serial baud rate")
     parser.add_argument("--base-yaw-deg", default="90.0", help="ros2_control base_footprint->base_link static yaw in degrees")
+    parser.add_argument("--lidar-serial-port", default="/dev/ttyUSB0")
+    parser.add_argument("--lidar-serial-baudrate", default="460800")
+    parser.add_argument("--lidar-frame-id", default="laser_frame")
+    parser.add_argument("--lidar-scan-mode", default="Standard")
+    parser.add_argument("--lidar-scan-frequency", default="10.0")
+    parser.add_argument("--lidar-inverted", action="store_true")
+    parser.add_argument("--no-lidar-angle-compensate", dest="lidar_angle_compensate", action="store_false")
+    parser.set_defaults(lidar_angle_compensate=True)
     parser.add_argument(
         "--use-mock-hardware",
         action="store_true",
@@ -254,11 +275,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head-camera-width", default="640")
     parser.add_argument("--head-camera-height", default="480")
     parser.add_argument("--head-camera-jpeg-quality", default="70")
-    parser.add_argument(
-        "--no-wait-for-time-sync",
-        action="store_true",
-        help="Bypass the NTP startup gate only when the Pi clock is already known to be correct.",
-    )
     parser.add_argument("--linear-x-scale", default="1.0")
     parser.add_argument("--linear-y-scale", default="1.0")
     parser.add_argument("--angular-z-scale", default="1.0")

@@ -29,7 +29,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -42,6 +42,13 @@ def generate_launch_description():
     baud_rate = LaunchConfiguration("baud_rate")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     base_yaw_deg = LaunchConfiguration("base_yaw_deg")
+    lidar_serial_port = LaunchConfiguration("lidar_serial_port")
+    lidar_serial_baudrate = LaunchConfiguration("lidar_serial_baudrate")
+    lidar_frame_id = LaunchConfiguration("lidar_frame_id")
+    lidar_scan_mode = LaunchConfiguration("lidar_scan_mode")
+    lidar_scan_frequency = LaunchConfiguration("lidar_scan_frequency")
+    lidar_inverted = LaunchConfiguration("lidar_inverted")
+    lidar_angle_compensate = LaunchConfiguration("lidar_angle_compensate")
     scan_input_topic = LaunchConfiguration("scan_input_topic")
     scan_topic = LaunchConfiguration("scan_topic")
     scan_marker_topic = LaunchConfiguration("scan_marker_topic")
@@ -65,6 +72,9 @@ def generate_launch_description():
     )
     head_camera_launch = PathJoinSubstitution(
         [FindPackageShare("alohamini_bringup"), "launch", "head_camera.launch.py"]
+    )
+    lidar_launch = PathJoinSubstitution(
+        [FindPackageShare("alohamini_rplidar_c1"), "launch", "rplidar_c1.launch.py"]
     )
 
     # URDF for the arm/lift joints that joint_state_publisher fills with zeros.
@@ -93,13 +103,22 @@ def generate_launch_description():
                 default_value="90.0",
                 description="Static yaw (deg) of base_footprint->base_link; tune if RViz forward/left look wrong.",
             ),
+            DeclareLaunchArgument("lidar_serial_port", default_value="/dev/ttyUSB0"),
+            DeclareLaunchArgument("lidar_serial_baudrate", default_value="460800"),
+            DeclareLaunchArgument("lidar_frame_id", default_value="laser_frame"),
+            DeclareLaunchArgument("lidar_scan_mode", default_value="Standard"),
+            DeclareLaunchArgument("lidar_scan_frequency", default_value="10.0"),
+            DeclareLaunchArgument("lidar_inverted", default_value="false"),
+            DeclareLaunchArgument("lidar_angle_compensate", default_value="true"),
             DeclareLaunchArgument("scan_input_topic", default_value="/scan"),
             DeclareLaunchArgument("scan_topic", default_value="/scan_filtered"),
             DeclareLaunchArgument("scan_marker_topic", default_value="/scan_sector_marker"),
             DeclareLaunchArgument("scan_marker_range", default_value="1.0"),
             DeclareLaunchArgument("scan_marker_publish_rate", default_value="1.0"),
-            DeclareLaunchArgument("scan_min_angle", default_value="-3.14159265359"),
-            DeclareLaunchArgument("scan_max_angle", default_value="0.0"),
+            # C1 cable faces rear: physical front is LaserScan angle +/-pi.
+            # min > max intentionally selects the sector across the wrap.
+            DeclareLaunchArgument("scan_min_angle", default_value="1.5707963267948966"),
+            DeclareLaunchArgument("scan_max_angle", default_value="-1.5707963267948966"),
             DeclareLaunchArgument("scan_max_age_sec", default_value="0.5"),
             DeclareLaunchArgument("scan_max_future_stamp_sec", default_value="0.2"),
             DeclareLaunchArgument("enable_head_camera", default_value="false"),
@@ -135,6 +154,24 @@ def generate_launch_description():
                     "height": head_camera_height,
                     "jpeg_quality": head_camera_jpeg_quality,
                 }.items(),
+            ),
+            # The C1 child uses scan_topic for raw data, while this launch uses
+            # it for filtered output. Scope the child so both keep their values.
+            GroupAction(
+                scoped=True,
+                actions=[IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(lidar_launch),
+                    launch_arguments={
+                        "serial_port": lidar_serial_port,
+                        "serial_baudrate": lidar_serial_baudrate,
+                        "frame_id": lidar_frame_id,
+                        "scan_topic": scan_input_topic,
+                        "scan_mode": lidar_scan_mode,
+                        "scan_frequency": lidar_scan_frequency,
+                        "inverted": lidar_inverted,
+                        "angle_compensate": lidar_angle_compensate,
+                    }.items(),
+                )],
             ),
             # Merge wheel states (real, from broadcaster) with zero defaults for the
             # arm/lift joints, publishing the complete /joint_states.

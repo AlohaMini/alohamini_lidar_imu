@@ -8,14 +8,15 @@ AlohaMini 的 SLAM 建图与 Nav2 导航 bringup。提供**两套底盘驱动**�
 | 驱动 | sensors 层 | 建图 | 导航 | 说明 |
 |------|-----------|------|------|------|
 | **ros2_control（推荐）** | `sensors_ros2_control.launch.py` | `mapping_ros2_control.launch.py` | `navigation_ros2_control.launch.py` | C++ 原生串口驱动 `alohamini_base_control`，直接按 Feetech 协议驱动底盘，无需 lerobot host |
-| ZMQ 桥（旧） | `sensors_bridge.launch.py` | `mapping.launch.py` | `navigation.launch.py` | Python `alohamini_nav_bridge`，需在机器人上另跑 `lekiwi_host.py` |
+| ZMQ 桥（可选） | `sensors_bridge.launch.py` | `mapping.launch.py` | `navigation.launch.py` | Python `alohamini_nav_bridge`，需在机器人上另跑 `lekiwi_host.py` |
 ## ros2_control 版用法（推荐）
 
-先确保工作区已构建、每个终端都 source：
+按 [安装文档](../../../docs/INSTALL.md) 在树莓派和 PC 的 ROS 容器内编译整个工作区。
+每个运行终端都执行：
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/alohamini_lidar_imu/ros2_ws/install/setup.bash
+source /root/ws/install/setup.bash
 ```
 
 ### 建图
@@ -31,6 +32,12 @@ ros2 run alohamini_bringup alohamini_mapping_session \
 
 如需关闭摄像头，不传 `--enable-head-camera`。
 
+会话脚本支持以下建图快捷键：
+
+- `Shift+S`：保存地图并继续建图。
+- `Shift+X`：保存地图、停止建图并退出。
+- `Ctrl+C` 或 `q`：停止建图但不保存。
+
 也可以直接启动 launch，再另开终端保存地图：
 
 ```bash
@@ -42,7 +49,7 @@ ros2 run nav2_map_server map_saver_cli -f ~/my_map
 
 如需关闭摄像头，将参数改为 `enable_head_camera:=false`。
 
-旧 ZMQ bridge 仍可用：`ros2 run alohamini_bringup alohamini_mapping_session --driver zmq --host 127.0.0.1 --map ~/my_map`。
+使用 ZMQ bridge：`ros2 run alohamini_bringup alohamini_mapping_session --driver zmq --host 127.0.0.1 --map ~/my_map`。
 
 ### 导航
 
@@ -54,6 +61,15 @@ ros2 launch alohamini_bringup navigation_ros2_control.launch.py \
 ```
 
 如需关闭摄像头，将参数改为 `enable_head_camera:=false`。
+
+### 查看头部摄像头
+
+建图使用 `--enable-head-camera`，或在建图／导航 launch 中设置
+`enable_head_camera:=true`。在 PC 的 RViz 中勾选并展开 `Head Camera`，
+将 `Topic` 设为 `/head_camera/image_raw/compressed`，
+`Topic → Reliability Policy` 设为 `Best Effort`，`Transport Hint` 设为 `compressed`。
+上方图像窗口会显示机器人视角。完整步骤与配图见
+[使用流程](../../../docs/WORKFLOW.md#41-查看头部摄像头)。
 
 ### 常用参数
 
@@ -81,9 +97,44 @@ ros2_control 的 `joint_state_broadcaster` 只发布**三个轮子**关节的状
 `base_link→laser_frame` 与 `odom→base_footprint` TF 均可解析。）
 
 `/scan_filtered` 只会重新打戳“仍然新鲜”的 `/scan`。默认丢弃超过 0.5 秒、来自未来
-超过 0.2 秒以及时间戳回退/重复的数据，避免把 XRCE/DDS 队列中的陈旧扫描伪装成当前
-障碍；参数为 `max_scan_age_sec`、`max_future_stamp_sec`、`drop_out_of_order`。过滤器会
-节流报告累计丢包数，发现警告时应检查 Pi NTP 和 micro-ROS Agent/ESP32。
+超过 0.2 秒以及时间戳回退/重复的数据；参数为 `max_scan_age_sec`、
+`max_future_stamp_sec`、`drop_out_of_order`。直接 USB C1 与底盘节点使用同一个 Pi 时钟，
+扫描数据不需要额外的跨设备时钟同步。
+
+## C1 参数
+
+传感器启动入口会默认启动 `alohamini_rplidar_c1`，参数如下：
+
+- `lidar_serial_port`：默认 `/dev/ttyUSB0`；推荐按 [安装文档](../../../docs/INSTALL.md#配置-devlidar_c1-udev-别名) 配置固定别名后使用 `/dev/lidar_c1`
+- `lidar_serial_baudrate`：默认 `460800`
+- `lidar_frame_id`：默认 `laser_frame`
+- `lidar_scan_mode`：默认 `Standard`
+- `lidar_scan_frequency`：默认 `10.0`
+- `lidar_inverted`、`lidar_angle_compensate`
+
+独立测试命令：
+
+```bash
+ros2 launch alohamini_rplidar_c1 test_rplidar_c1.launch.py serial_port:=/dev/ttyUSB0
+```
+
+配置 udev 别名后，把上面的路径替换为 `/dev/lidar_c1`；建图和导航入口同样通过
+`lidar_serial_port:=/dev/lidar_c1` 传入。
+
+### 扫描区域
+
+默认使用 C1 正装、出线口朝车尾的安装方式，`lidar_inverted:=false`。
+原始扫描发布到 `/scan`，传感器入口保留前方 180° 区域并发布到 `/scan_filtered`，
+供建图和导航使用。机器人模型及雷达关节由工作区的 URDF 提供。
+
+### 测试
+
+在已构建工作区的容器内执行：
+
+```bash
+colcon test --packages-select alohamini_bringup --event-handlers console_direct+
+colcon test-result --verbose
+```
 
 ## 实物注意事项
 

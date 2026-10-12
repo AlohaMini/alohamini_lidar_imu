@@ -2,7 +2,7 @@
 <package format="3">
   <name>alohamini_bringup</name>
   <version>0.1.0</version>
-  <description>Launch files and parameters for AlohaMini lidar/IMU SLAM and Nav2 bringup.</description>
+  <description>Launch files and parameters for AlohaMini C1 lidar SLAM and Nav2 bringup.</description>
   <maintainer email="todo@example.com">AlohaMini</maintainer>
   <license>BSD-3-Clause</license>
 
@@ -11,6 +11,7 @@
   <exec_depend>alohamini_description</exec_depend>
   <exec_depend>alohamini_nav_bridge</exec_depend>
   <exec_depend>alohamini_base_control</exec_depend>
+  <exec_depend>alohamini_rplidar_c1</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
@@ -28,6 +29,12 @@
   <exec_depend>robot_localization</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>slam_toolbox</exec_depend>
+  <!-- geometry2 #990 fixes the mapping/RViz TF deadlock; vendored in this workspace. -->
+  <exec_depend version_gte="0.25.24">tf2</exec_depend>
+  <exec_depend version_gte="0.25.24">tf2_ros</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>xacro</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

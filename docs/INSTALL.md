@@ -1,124 +1,59 @@
-# AlohaMini 树莓派安装依赖与容器创建
+# AlohaMini ROS 2 安装
 
-## 1. 开发机环境
-ros2的humble版本即可，含有rviz
+项目运行在 ROS 2 Humble Docker 环境中。推荐的部署方式是：树莓派运行带 `/dev` 映射的
+ROS2 容器，负责 C1、底盘、建图和导航；本机 PC 运行 `osrf/ros:humble-desktop`
+容器，负责通过同一 ROS Domain 的网络接收话题并运行 RViz。
 
+下面的命令分为树莓派宿主机和本机 PC 两部分。树莓派使用 ARM64 镜像，PC 使用
+Humble Desktop 镜像；两台机器需要在同一网络，并使用相同的 `ROS_DOMAIN_ID=5`。
 
-项目目录：
+## 树莓派宿主机安装 Docker
 
-```bash
-cd ~/alohamini_lidar_imu
-```
-
-默认参数：
-
-```text
-ROS_DOMAIN_ID=5
-micro-ROS Agent UDP 端口=8090
-AlohaMini host ZMQ command=5555
-AlohaMini host ZMQ observation=5556
-Nav2 容器名=alohamini_nav2
-micro-ROS Agent 容器名=microros_agent
-```
-
-## 2. 树莓派宿主机依赖
-
-基础工具：
+在树莓派宿主机执行：
 
 ```bash
 sudo apt update
-sudo apt install -y ca-certificates curl gnupg git rsync openssh-server
-```
-
-安装 Docker。树莓派系统如果是 Ubuntu / Debian，可以直接用 Docker 官方安装脚本：
-
-```bash
-curl -fsSL https://get.docker.com | sh
+sudo apt install -y ca-certificates curl gnupg
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"
 newgrp docker
-```
-
-如果网络问题无法安装，可以采取以下方式安装
-
-```bash
-bash <(curl -fsSL https://xuanyuan.cloud/docker.sh)
-```
-
-验证 Docker 可用：
-
-```bash
 docker version
 docker run --rm hello-world
 ```
 
-## 3. 需要 pull 的镜像
+如果系统已经安装 Docker，只需确认 `docker version` 和 `docker run --rm hello-world`
+可以成功执行即可。
 
-Pi 侧需要两个上游镜像：
+## 树莓派拉取 ROS2 镜像
+
+树莓派只需要 ROS2 基础镜像；项目内的 C1 SDK 和 ROS2 节点会在工作区中编译：
 
 ```bash
-docker pull --platform linux/arm64/v8 docker.io/microros/micro-ros-agent:humble
 docker pull --platform linux/arm64/v8 docker.io/library/ros:humble-ros-base-jammy
 ```
 
-用途：
-
-```text
-docker.io/microros/micro-ros-agent:humble  接收 ESP32 / micro-ROS 发布的 /scan 和 /imu
-docker.io/library/ros:humble-ros-base-jammy  手工安装 Nav2、SLAM Toolbox 和 bridge 运行依赖的基础容器
-```
-
-如果树莓派访问 Docker Hub 慢，可以在网络更好的电脑上拉 arm64 镜像并导出：
+如果树莓派无法直接访问 Docker Hub，可以在可联网的电脑上准备 ARM64 镜像：
 
 ```bash
-docker pull --platform linux/arm64/v8 docker.io/microros/micro-ros-agent:humble
 docker pull --platform linux/arm64/v8 docker.io/library/ros:humble-ros-base-jammy
-docker save -o micro_ros_humble_arm64.tar docker.io/microros/micro-ros-agent:humble
-docker save -o ros_humble_base_jammy_arm64.tar docker.io/library/ros:humble-ros-base-jammy
-scp micro_ros_humble_arm64.tar ros_humble_base_jammy_arm64.tar pi5@pi5_ip:~/
+docker save -o ros_humble_base_jammy_arm64.tar \
+  docker.io/library/ros:humble-ros-base-jammy
+scp ros_humble_base_jammy_arm64.tar <pi_user>@<pi_ip>:~/
 ```
 
-树莓派上导入：
+再在树莓派导入：
 
 ```bash
-sudo docker load -i micro_ros_humble_arm64.tar
-sudo docker load -i ros_humble_base_jammy_arm64.tar
+docker load -i ~/ros_humble_base_jammy_arm64.tar
 ```
 
-## 4. 创建 micro-ROS Agent 容器
+## 创建树莓派 ROS2 容器
 
-micro-ROS Agent 负责把开发板发布的雷达和 IMU 接入 ROS2 网络。
-
-```bash
-docker rm -f microros_agent 2>/dev/null || true
-
-docker create --restart=no \
-  --platform linux/arm64/v8 \
-  --net=host \
-  --privileged \
-  -v /dev:/dev \
-  -v /dev/shm:/dev/shm \
-  -e ROS_DOMAIN_ID=5 \
-  --name microros_agent \
-  docker.io/microros/micro-ros-agent:humble \
-  udp4 --port 8090 -v4
-```
-
-容器创建后不要直接启动，先通过树莓派宿主机的时钟门禁，同时开启agent：
+在树莓派宿主机的项目目录执行。`/dev:/dev` 让容器访问 C1 和底盘串口，
+`--net=host` 让本机 PC 的 RViz 可以通过 DDS 接收话题：
 
 ```bash
 cd ~/alohamini_lidar_imu
-./ros2_ws/src/alohamini_bringup/scripts/start_microros_agent_after_time_sync
-```
-
-再查看日志：
-
-```bash
-docker logs -f microros_agent
-```
-
-## 5. 创建 Nav2 / SLAM 运行容器
-
-```bash
 docker rm -f alohamini_nav2 2>/dev/null || true
 
 docker run -dit \
@@ -127,6 +62,7 @@ docker run -dit \
   --ipc=host \
   --privileged \
   -v /dev:/dev \
+  -v /dev/shm:/dev/shm \
   -e ROS_DOMAIN_ID=5 \
   -e ROS_LOCALHOST_ONLY=0 \
   -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
@@ -142,93 +78,226 @@ docker run -dit \
 docker exec -it alohamini_nav2 bash
 ```
 
-进入容器后确认前摄像头映射：
+需要头部摄像头时，在树莓派容器内确认设备可见：
 
 ```bash
 ls -l /dev/am_camera_forward
 ```
 
-## 6. 在 Nav2 容器内安装 ROS2 依赖
+若使用其他设备路径，在启动命令中指定对应相机参数，查看步骤见
+[WORKFLOW.md](WORKFLOW.md#41-查看头部摄像头)。
 
-下面命令在 `alohamini_nav2` 容器内执行：
+## 在树莓派容器内安装 ROS2 依赖并构建
 
 ```bash
-apt update
+apt-get update
 apt install -y --no-install-recommends \
-  ros-humble-navigation2 \
-  ros-humble-nav2-bringup \
-  ros-humble-nav2-collision-monitor \
-  ros-humble-nav2-lifecycle-manager \
-  ros-humble-slam-toolbox \
-  ros-humble-robot-localization \
-  ros-humble-ros2-control \
-  ros-humble-ros2-controllers \
-  ros-humble-controller-manager \
-  ros-humble-joint-state-broadcaster \
-  ros-humble-realtime-tools \
-  ros-humble-tf2-ros \
-  ros-humble-tf2-tools \
-  ros-humble-robot-state-publisher \
-  ros-humble-joint-state-publisher \
-  ros-humble-xacro \
-  ros-humble-laser-filters \
-  ros-humble-image-transport-plugins \
-  ros-humble-teleop-twist-keyboard \
-  ros-humble-rmw-fastrtps-cpp \
-  libopencv-dev \
-  python3-colcon-common-extensions \
-  python3-pip \
-  python3-zmq \
-  iproute2 \
-  iputils-ping \
-  net-tools \
-  nano
-
-pip3 install --no-cache-dir pyzmq
+  ros-humble-navigation2 ros-humble-nav2-bringup \
+  ros-humble-nav2-collision-monitor ros-humble-nav2-lifecycle-manager \
+  ros-humble-slam-toolbox ros-humble-robot-localization \
+  ros-humble-ros2-control ros-humble-ros2-controllers \
+  ros-humble-controller-manager ros-humble-joint-state-broadcaster \
+  ros-humble-realtime-tools ros-humble-tf2-ros ros-humble-tf2-tools \
+  ros-humble-robot-state-publisher ros-humble-joint-state-publisher \
+  ros-humble-xacro ros-humble-image-transport-plugins \
+  ros-humble-rmw-fastrtps-cpp libopencv-dev \
+  ros-humble-ament-cmake-google-benchmark ros-humble-ament-lint-common \
+  ros-humble-ament-cmake-gtest ros-humble-ament-cmake-gen-version-h \
+  python3-colcon-common-extensions python3-zmq iproute2 iputils-ping net-tools
 ```
 
-写入默认 ROS 环境：
-
-```bash
-echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
-echo "export ROS_DOMAIN_ID=5" >> /root/.bashrc
-echo "export ROS_LOCALHOST_ONLY=0" >> /root/.bashrc
-echo "export RMW_IMPLEMENTATION=rmw_fastrtps_cpp" >> /root/.bashrc
-```
-
-## 7. 构建本项目 ROS2 工作空间
-
-仍然在 `alohamini_nav2` 容器内执行：
+构建工作空间：
 
 ```bash
 cd /root/ws
 source /opt/ros/humble/setup.bash
-colcon build --symlink-install
+MAKEFLAGS=-j2 colcon build --symlink-install --executor sequential
 source install/setup.bash
 ```
 
-## 8. 首次运行检查
-
-先确认容器都在运行：
+以后重启树莓派或容器时，只需要：
 
 ```bash
-docker ps
-```
-
-进入 Nav2 容器：
-
-```bash
+docker start alohamini_nav2
 docker exec -it alohamini_nav2 bash
+source /opt/ros/humble/setup.bash
+source /root/ws/install/setup.bash
 ```
 
-容器内检查 micro-ROS 话题：
+## 本机 PC 的 RViz/C1 Docker 容器
+
+本机 PC 使用 `docker.io/osrf/ros:humble-desktop` 运行 RViz，通过 host 网络接收树莓派
+容器发布的 `/scan_filtered`、`/map`、TF、Nav2 路径和相机话题。PC 和树莓派必须在
+同一局域网，并使用相同的 `ROS_DOMAIN_ID=5`。建图和导航的实际启动命令在
+[WORKFLOW.md](WORKFLOW.md)；建图时键盘会话在树莓派容器中运行，PC 容器负责 RViz 显示。
+
+先在 PC 宿主机拉取镜像：
+
+```bash
+docker pull docker.io/osrf/ros:humble-desktop
+```
+
+本机的 `alohamini_rviz_humble` 容器需要在创建时映射宿主机 `/dev`，运行中的
+容器不能临时增加这个挂载。因此如果该容器以前没有映射 `/dev`，需要按下面命令
+用同名容器重新创建；工作区在宿主机，代码不会丢失，但容器内通过 `apt` 安装的
+软件包需要重新安装。只查看树莓派数据时并不需要 PC 的 `/dev`，保留映射是为了让
+同一个容器也能在 C1 插到 PC 时运行独立雷达测试。
+
+在宿主机项目根目录执行：
+
+```bash
+cd /home/yigeoooo/project/alohamini_lidar_imu
+xhost +local:root  # 如果本机 X11 已允许 root，可跳过
+docker rm -f alohamini_rviz_humble 2>/dev/null || true
+
+docker run -dit \
+  --name alohamini_rviz_humble \
+  --net=host \
+  --ipc=host \
+  --privileged \
+  -v /dev:/dev \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v "$PWD/ros2_ws:/root/ws" \
+  -e DISPLAY="${DISPLAY:-:1}" \
+  -e QT_X11_NO_MITSHM=1 \
+  -e ROS_DOMAIN_ID=5 \
+  -e ROS_LOCALHOST_ONLY=0 \
+  -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
+  docker.io/osrf/ros:humble-desktop \
+  bash
+```
+
+进入容器安装本项目和 RViz 所需依赖。只需首次创建容器时执行：
+
+```bash
+docker exec -it alohamini_rviz_humble bash
+apt-get update
+apt-get install -y --no-install-recommends \
+  python3-colcon-common-extensions python3-zmq libopencv-dev \
+  ros-humble-navigation2 ros-humble-nav2-bringup \
+  ros-humble-nav2-rviz-plugins ros-humble-slam-toolbox \
+  ros-humble-robot-localization ros-humble-ros2-control \
+  ros-humble-ros2-controllers ros-humble-controller-manager \
+  ros-humble-joint-state-broadcaster ros-humble-realtime-tools \
+  ros-humble-tf2-ros ros-humble-tf2-tools \
+  ros-humble-robot-state-publisher ros-humble-joint-state-publisher \
+  ros-humble-xacro ros-humble-image-transport-plugins \
+  ros-humble-rmw-fastrtps-cpp iproute2 iputils-ping net-tools \
+  ros-humble-ament-cmake-google-benchmark ros-humble-ament-lint-common \
+  ros-humble-ament-cmake-gtest ros-humble-ament-cmake-gen-version-h
+
+source /opt/ros/humble/setup.bash
+cd /root/ws
+MAKEFLAGS=-j2 colcon build --symlink-install --executor sequential
+source install/setup.bash
+```
+
+整个工作区会一起编译项目节点及内置的 `tf2` / `tf2_ros` 依赖。树莓派和 PC
+分别在各自容器中编译；每个运行终端都依次 source ROS 2 和工作区的 `setup.bash`。
+
+确认容器已经看到雷达：
+
+```bash
+ls -l /dev/ttyUSB* /dev/lidar_c1
+```
+
+如果没有配置 udev 别名，使用 `/dev/ttyUSB0`；如果已配置序列号别名，使用
+`/dev/lidar_c1`。测试容器必须在雷达插入后启动，或者重新插拔雷达 USB 线。
+
+确认当前终端使用工作区：
+
+```bash
+ros2 pkg prefix alohamini_bringup
+ros2 pkg prefix tf2
+ros2 pkg prefix tf2_ros
+```
+
+路径应位于 `/root/ws/install/` 下。随后按 [WORKFLOW.md](WORKFLOW.md) 启动应用。
+
+## USB 串口
+
+先在运行 Docker 的宿主机确认设备：
+
+```bash
+ls -l /dev/ttyUSB* /dev/ttyACM*
+lsusb
+```
+
+驱动和 launch 的默认串口是 `/dev/ttyUSB0`。这个编号会随 USB 插拔顺序变化，建议给
+C1 配置固定别名 `/dev/lidar_c1`，再在 launch 中使用该别名。
+
+### 配置 `/dev/lidar_c1` udev 别名
+
+先只连接 C1，确认当前设备节点和 USB 信息：
+
+```bash
+ls -l /dev/ttyUSB*
+udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+```
+
+仓库已经提供常见 C1 CP210x 转换器的规则模板。在运行 Docker 的宿主机上：
+`ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules`。在树莓派宿主机执行：
+
+```bash
+sudo cp ~/alohamini_lidar_imu/ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules \
+  /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
+```
+
+模板按 `lerobot_alohamini` 中 leader 臂的方式使用 USB 唯一序列号匹配，避免
+多个相同 USB 转串口设备之间串线。先读取 C1 序列号：
+
+```bash
+udevadm info --attribute-walk --name=/dev/ttyUSB0 \
+  | awk -F'"' '/ATTRS{serial}/{print $2; exit}'
+```
+
+编辑刚才复制的规则文件，把 `<c1_serial>` 替换成实际输出的序列号。规则中的完整行应为：
+
+```text
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{serial}=="从 udevadm 输出复制的序列号", MODE:="0660", GROUP="dialout", SYMLINK+="lidar_c1"
+```
+
+如果 `udevadm` 没有输出 `ATTRS{serial}`，不要使用仅按 `10c4:ea60` 匹配的规则，
+否则其他 CP210x 设备可能占用 `/dev/lidar_c1`；此时应使用硬件提供的唯一序列号，
+或临时继续使用 `/dev/ttyUSB0`。
+
+修改规则后重新加载并触发：
+
+```bash
+sudo usermod -aG dialout "$USER"  
+# 当前用户尚未在 dialout 组时执行，重新登录后生效
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+# 最可靠的做法是拔下并重新插入 C1 USB 线
+ls -l /dev/lidar_c1
+readlink -f /dev/lidar_c1
+```
+
+确认别名指向 C1 后，单独测试和完整 bringup 都传入同一个参数：
+
+```bash
+ros2 launch alohamini_rplidar_c1 test_rplidar_c1.launch.py \
+  serial_port:=/dev/lidar_c1
+ros2 launch alohamini_bringup mapping_ros2_control.launch.py \
+  serial_port:=/dev/ttyACM0 lidar_serial_port:=/dev/lidar_c1
+```
+
+如果尚未安装 udev 规则，仍可直接使用默认的 `/dev/ttyUSB0`。
+
+## 首次检查
 
 ```bash
 source /opt/ros/humble/setup.bash
 source /root/ws/install/setup.bash
-export ROS_DOMAIN_ID=5
-
-ros2 topic list
-ros2 topic echo /scan --once
-ros2 topic echo /imu --once
+ros2 launch alohamini_rplidar_c1 test_rplidar_c1.launch.py \
+  serial_port:=/dev/ttyUSB0
 ```
+
+随后确认：
+
+```bash
+ros2 topic echo /scan --once
+ros2 topic hz /scan
+```
+
+测试节点会报告 frame、点数、有效点数、频率、角度范围和距离范围。

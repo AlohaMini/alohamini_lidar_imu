@@ -10,6 +10,7 @@ Panels:
         - /Scan Sector1
         - /Map1
         - /Odometry1
+        - /Head Camera1
       Splitter Ratio: 0.5
     Tree Height: 515
   - Class: rviz_common/Selection
@@ -79,8 +80,12 @@ Visualization Manager:
       Normalize Range: true
       Queue Size: 1
       Transport Hint: compressed
-      Unreliable: true
-      Topic: /head_camera/image_raw/compressed
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /head_camera/image_raw/compressed
       Value: true
     - Alpha: 0.7
       Class: rviz_default_plugins/Map

@@ -12,6 +12,13 @@ def generate_launch_description():
     map_file = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
     use_joint_state_publisher = LaunchConfiguration("use_joint_state_publisher")
+    lidar_serial_port = LaunchConfiguration("lidar_serial_port")
+    lidar_serial_baudrate = LaunchConfiguration("lidar_serial_baudrate")
+    lidar_frame_id = LaunchConfiguration("lidar_frame_id")
+    lidar_scan_mode = LaunchConfiguration("lidar_scan_mode")
+    lidar_scan_frequency = LaunchConfiguration("lidar_scan_frequency")
+    lidar_inverted = LaunchConfiguration("lidar_inverted")
+    lidar_angle_compensate = LaunchConfiguration("lidar_angle_compensate")
     linear_x_scale = LaunchConfiguration("linear_x_scale")
     linear_y_scale = LaunchConfiguration("linear_y_scale")
     angular_z_scale = LaunchConfiguration("angular_z_scale")
@@ -42,6 +49,13 @@ def generate_launch_description():
             DeclareLaunchArgument("map", description="Path to a saved map yaml file."),
             DeclareLaunchArgument("params_file", default_value=default_params),
             DeclareLaunchArgument("use_joint_state_publisher", default_value="true"),
+            DeclareLaunchArgument("lidar_serial_port", default_value="/dev/ttyUSB0"),
+            DeclareLaunchArgument("lidar_serial_baudrate", default_value="460800"),
+            DeclareLaunchArgument("lidar_frame_id", default_value="laser_frame"),
+            DeclareLaunchArgument("lidar_scan_mode", default_value="Standard"),
+            DeclareLaunchArgument("lidar_scan_frequency", default_value="10.0"),
+            DeclareLaunchArgument("lidar_inverted", default_value="false"),
+            DeclareLaunchArgument("lidar_angle_compensate", default_value="true"),
             DeclareLaunchArgument("linear_x_scale", default_value="1.0"),
             DeclareLaunchArgument("linear_y_scale", default_value="1.0"),
             DeclareLaunchArgument("angular_z_scale", default_value="1.0"),
@@ -60,6 +74,13 @@ def generate_launch_description():
                     "cmd_port": cmd_port,
                     "obs_port": obs_port,
                     "use_joint_state_publisher": use_joint_state_publisher,
+                    "lidar_serial_port": lidar_serial_port,
+                    "lidar_serial_baudrate": lidar_serial_baudrate,
+                    "lidar_frame_id": lidar_frame_id,
+                    "lidar_scan_mode": lidar_scan_mode,
+                    "lidar_scan_frequency": lidar_scan_frequency,
+                    "lidar_inverted": lidar_inverted,
+                    "lidar_angle_compensate": lidar_angle_compensate,
                     "linear_x_scale": linear_x_scale,
                     "linear_y_scale": linear_y_scale,
                     "angular_z_scale": angular_z_scale,

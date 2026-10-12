@@ -24,7 +24,3 @@ ekf_filter_node:
     odom0_queue_size: 5
     odom0_differential: false
     odom0_relative: false
-
-    # IMU yaw-rate fusion is disabled until the gyro frame/sign is calibrated.
-    # The current /imu.angular_velocity.z stays near zero during real turns and
-    # otherwise overpowers /wheel/odom in the EKF.

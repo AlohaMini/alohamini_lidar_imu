@@ -1,78 +1,43 @@
-# AlohaMini 雷达 / IMU 导航接入整理包
+# AlohaMini 雷达与导航
 
-这个目录是 AlohaMini micro-ROS 雷达 / IMU 接入、ROS2 bridge、SLAM 建图和 Nav2 导航的独立整理包。
+本项目使用树莓派直接连接思岚 RPLIDAR C1，通过 ROS 2 发布激光数据，并提供
+底盘控制、SLAM 建图、Nav2 导航和 RViz 启动入口。
 
-## 目录结构
+## 目录
 
 ```text
 alohamini_lidar_imu/
-├── firmware/
-│   └── lidar_imu_publisher/        # ESP-IDF micro-ROS 雷达 / IMU 固件工程
-├── extra_components/               # 固件构建依赖，保持相对路径可用
-├── ros2_ws/
-│   └── src/
-│       ├── alohamini_description/  # AlohaMini 机器人模型和雷达 / IMU TF
-│       ├── alohamini_nav_bridge/   # 旧 /cmd_vel <-> AlohaMini ZMQ host 桥接
-│       ├── alohamini_base_control/ # 推荐 ros2_control 底盘串口驱动
-│       └── alohamini_bringup/      # SLAM、Nav2、RViz、传感器过滤启动入口
+├── ros2_ws/src/
+│   ├── alohamini_rplidar_c1/      # C1 ROS 2 驱动、完整内置 Slamtec SDK、扫描测试
+│   ├── alohamini_description/     # 机器人模型和 laser_frame TF
+│   ├── alohamini_base_control/    # ros2_control 底盘驱动
+│   ├── alohamini_nav_bridge/      # 可选 ZMQ 底盘桥
+│   ├── alohamini_bringup/         # 传感器、SLAM、Nav2、RViz 启动入口
+│   └── third_party/geometry2/     # TF2 0.25.24 源码依赖
 └── docs/
-    ├── INSTALL.md                  # 树莓派依赖、镜像 pull 和容器创建
-    ├── WORKFLOW.md                 # 建图、保存地图、导航和 RViz 完整流程
-    └── FIRMWARE_FLASHING.md        # 固件烧录和 ESP-IDF 环境说明
+    ├── INSTALL.md                 # Docker 和 ROS 2 依赖
+    └── WORKFLOW.md                # C1 测试、建图、导航和 RViz 流程
 ```
 
-## 文档入口
+运行环境统一使用 ROS 2 Humble Docker：树莓派容器负责 C1、底盘、建图和导航，本机 PC
+容器负责 RViz 可视化。树莓派 Docker、PC RViz 容器和依赖安装见
+[docs/INSTALL.md](docs/INSTALL.md)；从 C1 测试到 PC 查看建图、设置导航起点和发送目标点
+的完整顺序见 [docs/WORKFLOW.md](docs/WORKFLOW.md)。
 
-- [依赖安装](docs/INSTALL.md)：树莓派宿主机依赖、Docker 镜像、容器创建和 ROS2 依赖安装。
-- [Micro Ros代码烧录](docs/FIRMWARE_FLASHING.md)：micro-ROS 控制板固件烧录记录和 ESP-IDF 使用说明。
-- [工作流程](docs/WORKFLOW.md)：micro-ROS Agent、建图、保存地图、导航和本机 RViz 可视化流程。
+树莓派和 PC 都需要编译整个工作区，每次运行前依次 source ROS 2 和工作区的
+`setup.bash`。工作区依赖随项目一起编译，无需额外下载雷达 SDK 或 TF2 源码。
 
+## 话题和默认硬件参数
 
-## 当前配置
-
-- 树莓派 IP：`192.168.10.157`（实际IP根据连上网络后自行替换为真实IP地址）
-- micro-ROS Agent UDP 端口：`8090`
+- C1 原始话题：`/scan`
+- 建图 / 导航话题：`/scan_filtered`
+- C1 串口默认：`/dev/ttyUSB0`（推荐配置 udev 固定别名 `/dev/lidar_c1`）
+- C1 波特率：`460800`
+- 扫描模式：`Standard`
+- frame：`laser_frame`
 - ROS Domain ID：`5`
-- 原始雷达话题：`/scan`
-- 建图 / 导航雷达话题：`/scan_filtered`，由 `scan_sector_filter` 发布；默认只保留物理前方 `[-180°, 0°]` 扇区
-- IMU 话题：`/imu`
 
-## 树莓派项目位置
-
-项目文件放在树莓派上的位置为：
-
-```text
-~/alohamini_lidar_imu/
-```
-
-Nav2 容器里把宿主机的 `~/alohamini_lidar_imu/ros2_ws` 挂载为 `/root/ws`。容器内构建和运行 ROS2 命令时默认使用：
-
-```bash
-cd /root/ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=5
-```
-
-## 雷达和 IMU 安装 URDF 位置
-
-当前 URDF 中雷达和 IMU 位姿是未实测前的保守默认：
-
-```text
-ros2_ws/src/alohamini_description/urdf/alohamini_nav.urdf
-```
-
-- `laser_frame`：URDF 里写在 CAD `base_link` 坐标下：`xyz="0 -0.20 0.12"`、`rpy="0 0 0"`；经 `base_footprint→base_link` +90° 静态变换后，等效到机器人视觉前方中线，`base_footprint` 约 `xyz="0.20 0.00 0.12"`。当前 MS200 固件发布的 LaserScan 0° 对应 `base_footprint` +Y，物理正前方对应 LaserScan -90°。
-- `imu_frame`：URDF 里写在 CAD `base_link` 坐标下：`xyz="0.00978916757496985 0.00084647910851246 0.344753325406094"`，等效为 `base_footprint` 下的 base inertial origin，作为当前质心估计。
-
-后续量出真实安装位置后，仍建议复核并修改这两个 fixed joint：
-
-```xml
-<joint name="base_link_to_laser_frame" type="fixed">
-  <origin xyz="0 -0.20 0.12" rpy="0 0 0" />
-</joint>
-
-<joint name="base_link_to_imu_frame" type="fixed">
-  <origin xyz="X Y Z" rpy="ROLL PITCH YAW" />
-</joint>
-```
+C1 驱动和测试说明见 [alohamini_rplidar_c1/README.md](ros2_ws/src/alohamini_rplidar_c1/README.md)。
+树莓派 USB 固定别名配置见 [安装文档](docs/INSTALL.md#配置-devlidar_c1-udev-别名)。
+雷达安装位置和姿态见 [alohamini_nav.urdf](ros2_ws/src/alohamini_description/urdf/alohamini_nav.urdf)。
+默认安装方式为 C1 正装、出线口朝车尾，建图和导航默认使用前方 180° 扫描区域。

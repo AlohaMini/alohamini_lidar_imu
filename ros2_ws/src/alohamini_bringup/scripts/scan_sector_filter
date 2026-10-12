@@ -149,7 +149,7 @@ class ScanSectorFilter(Node):
         self.get_logger().warn(
             f"Dropping {self.input_topic} ({reason}, age={age_sec:+.3f} s); "
             f"totals: stale={self.dropped_stale}, future={self.dropped_future}, "
-            f"out_of_order={self.dropped_out_of_order}. Check Pi NTP, ESP32 and micro-ROS Agent."
+            f"out_of_order={self.dropped_out_of_order}. Check the Pi clock and C1 driver."
         )
         self.last_drop_warning_ns = now_ns
 
@@ -164,7 +164,7 @@ class ScanSectorFilter(Node):
                 self.warn_drop_throttled("timestamp did not advance", age_sec)
                 return None
 
-        # Do not restamp packets which have already spent too long in XRCE/DDS
+        # Do not restamp packets which have already spent too long in DDS
         # queues: that would disguise old measurements as current obstacles.
         if self.max_scan_age_sec > 0.0 and age_sec > self.max_scan_age_sec:
             self.dropped_stale += 1
@@ -181,13 +181,9 @@ class ScanSectorFilter(Node):
     def output_header_for(self, msg: LaserScan, now, age_sec: float):
         """Return an output header in the Pi's clock domain.
 
-        `/scan` is published by the ESP32 and its clock is synchronized through
-        the micro-ROS Agent.  `/odom` is timestamped by the Pi.  When the Pi's
-        wall clock is corrected after boot, the two domains can temporarily be
-        tens of seconds apart; exact sensor timestamps then make TF consumers
-        reject otherwise fresh scans.  The physical scan is received live over
-        DDS, so for the filtered navigation topic reception time is the safe
-        common clock.
+        `/scan` is published by the C1 driver on the Pi, so it already uses the
+        same clock domain as `/odom`. Restamping remains available as a safety
+        option for scans queued by DDS, while stale data is still dropped.
         """
         if not self.restamp_to_local_clock:
             return msg.header
@@ -199,7 +195,7 @@ class ScanSectorFilter(Node):
         ):
             self.get_logger().warn(
                 f"Restamping {self.input_topic}: input timestamp differs from local clock "
-                f"by {age_sec:+.3f} s. Check Pi NTP and micro-ROS Agent time sync."
+                f"by {age_sec:+.3f} s. Check the Pi clock and C1 driver."
             )
             self.last_stale_stamp_warning_ns = now.nanoseconds
 
