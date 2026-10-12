@@ -24,8 +24,6 @@ alohamini_lidar_imu/
 [docs/INSTALL.md](docs/INSTALL.md)；从 C1 测试到 PC 查看建图、设置导航起点和发送目标点
 的完整顺序见 [docs/WORKFLOW.md](docs/WORKFLOW.md)。
 
-树莓派和 PC 都需要编译整个工作区，每次运行前依次 source ROS 2 和工作区的
-`setup.bash`。工作区依赖随项目一起编译，无需额外下载雷达 SDK 或 TF2 源码。
 
 ## 话题和默认硬件参数
 
