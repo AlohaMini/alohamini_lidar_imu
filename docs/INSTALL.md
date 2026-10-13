@@ -47,6 +47,113 @@ scp ros_humble_base_jammy_arm64.tar <pi_user>@<pi_ip>:~/
 docker load -i ~/ros_humble_base_jammy_arm64.tar
 ```
 
+## USB 串口
+
+配置别名，必须要在创建容器之前执行，否则在容器内将会无法查询到配置别名之后的雷达和imu
+先在运行 Docker 的宿主机确认设备：
+
+```bash
+ls -l /dev/ttyUSB* /dev/ttyACM*
+lsusb
+```
+
+驱动和 launch 的默认串口是 `/dev/ttyUSB0`。这个编号会随 USB 插拔顺序变化，建议给
+C1 配置固定别名 `/dev/lidar_c1`，再在 launch 中使用该别名。
+
+### 配置 `/dev/lidar_c1` udev 别名
+
+先只连接 C1，确认当前设备节点和 USB 信息：
+
+```bash
+ls -l /dev/ttyUSB*
+udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+```
+
+仓库已经提供常见 C1 CP210x 转换器的规则模板。在运行 Docker 的宿主机上：
+`ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules`。在树莓派宿主机执行：
+
+```bash
+sudo cp ~/alohamini_lidar_imu/ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules \
+  /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
+```
+
+模板按 `lerobot_alohamini` 中 leader 臂的方式使用 USB 唯一序列号匹配，避免
+多个相同 USB 转串口设备之间串线。先读取 C1 序列号：
+
+```bash
+udevadm info --attribute-walk --name=/dev/ttyUSB0 \
+  | awk -F'"' '/ATTRS{serial}/{print $2; exit}'
+```
+
+编辑刚才复制的规则文件，把 `<c1_serial>` 替换成实际输出的序列号。规则中的完整行应为：
+
+```text
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{serial}=="从 udevadm 输出复制的序列号", MODE:="0660", GROUP="dialout", SYMLINK+="lidar_c1"
+```
+
+如果 `udevadm` 没有输出 `ATTRS{serial}`，不要使用仅按 `10c4:ea60` 匹配的规则，
+否则其他 CP210x 设备可能占用 `/dev/lidar_c1`；此时应使用硬件提供的唯一序列号，
+或临时继续使用 `/dev/ttyUSB0`。
+
+修改规则后重新加载并触发：
+
+```bash
+sudo usermod -aG dialout "$USER"  
+# 当前用户尚未在 dialout 组时执行，重新登录后生效
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+# 最可靠的做法是拔下并重新插入 C1 USB 线
+ls -l /dev/lidar_c1
+readlink -f /dev/lidar_c1
+```
+
+确认别名指向 C1 后，单独测试和完整 bringup 都传入同一个参数：
+
+```bash
+ros2 launch alohamini_rplidar_c1 test_rplidar_c1.launch.py \
+  serial_port:=/dev/lidar_c1
+ros2 launch alohamini_bringup mapping_ros2_control.launch.py \
+  serial_port:=/dev/ttyACM0 lidar_serial_port:=/dev/lidar_c1
+```
+
+如果尚未安装 udev 规则，仍可直接使用默认的 `/dev/ttyUSB0`。
+
+### 配置 `/dev/imu` udev 别名
+
+只连接imu，用以下命令查询信息
+
+```bash
+udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+```
+
+假如查询出来的内容为：
+
+```bash
+E: ID_MODEL_ID=7523
+E: ID_VENDOR_ID=1a86
+```
+
+在 `/etc/udev/rules.d/99-alohamini-rplidar-c1.rules`追加一行，绑定imu规则
+
+```bash
+sudo nano /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
+```
+
+粘贴以下内容，idVendor与idProduct替换成查询到的数字，将第一步ID_MODEL_ID值填入idProduct，将ID_VENDOR_ID填入idVendor
+
+```bash
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{idVendor}=="idVendor", ATTRS{idProduct}=="idProduct", MODE:="0660", GROUP="dialout", SYMLINK+="imu"
+```
+
+修改规则后重新加载并触发：
+
+```bash
+sudo usermod -aG dialout "$USER"  
+# 当前用户尚未在 dialout 组时执行，重新登录后生效
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 ## 创建树莓派 ROS2 容器
 
 在树莓派宿主机的项目目录执行。`/dev:/dev` 让容器访问 C1 和底盘串口，
@@ -218,113 +325,6 @@ ros2 pkg prefix tf2_ros
 ```
 
 路径应位于 `/root/ws/install/` 下。随后按 [WORKFLOW.md](WORKFLOW.md) 启动应用。
-
-## USB 串口
-
-先在运行 Docker 的宿主机确认设备：
-
-```bash
-ls -l /dev/ttyUSB* /dev/ttyACM*
-lsusb
-```
-
-驱动和 launch 的默认串口是 `/dev/ttyUSB0`。这个编号会随 USB 插拔顺序变化，建议给
-C1 配置固定别名 `/dev/lidar_c1`，再在 launch 中使用该别名。
-
-### 配置 `/dev/lidar_c1` udev 别名
-
-先只连接 C1，确认当前设备节点和 USB 信息：
-
-```bash
-ls -l /dev/ttyUSB*
-udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
-```
-
-仓库已经提供常见 C1 CP210x 转换器的规则模板。在运行 Docker 的宿主机上：
-`ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules`。在树莓派宿主机执行：
-
-```bash
-sudo cp ~/alohamini_lidar_imu/ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini-rplidar-c1.rules \
-  /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
-```
-
-模板按 `lerobot_alohamini` 中 leader 臂的方式使用 USB 唯一序列号匹配，避免
-多个相同 USB 转串口设备之间串线。先读取 C1 序列号：
-
-```bash
-udevadm info --attribute-walk --name=/dev/ttyUSB0 \
-  | awk -F'"' '/ATTRS{serial}/{print $2; exit}'
-```
-
-编辑刚才复制的规则文件，把 `<c1_serial>` 替换成实际输出的序列号。规则中的完整行应为：
-
-```text
-SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{serial}=="从 udevadm 输出复制的序列号", MODE:="0660", GROUP="dialout", SYMLINK+="lidar_c1"
-```
-
-如果 `udevadm` 没有输出 `ATTRS{serial}`，不要使用仅按 `10c4:ea60` 匹配的规则，
-否则其他 CP210x 设备可能占用 `/dev/lidar_c1`；此时应使用硬件提供的唯一序列号，
-或临时继续使用 `/dev/ttyUSB0`。
-
-修改规则后重新加载并触发：
-
-```bash
-sudo usermod -aG dialout "$USER"  
-# 当前用户尚未在 dialout 组时执行，重新登录后生效
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-# 最可靠的做法是拔下并重新插入 C1 USB 线
-ls -l /dev/lidar_c1
-readlink -f /dev/lidar_c1
-```
-
-确认别名指向 C1 后，单独测试和完整 bringup 都传入同一个参数：
-
-```bash
-ros2 launch alohamini_rplidar_c1 test_rplidar_c1.launch.py \
-  serial_port:=/dev/lidar_c1
-ros2 launch alohamini_bringup mapping_ros2_control.launch.py \
-  serial_port:=/dev/ttyACM0 lidar_serial_port:=/dev/lidar_c1
-```
-
-如果尚未安装 udev 规则，仍可直接使用默认的 `/dev/ttyUSB0`。
-
-### 配置 `/dev/imu` udev 别名
-
-只连接imu，用以下命令查询信息
-
-```bash
-udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
-```
-
-假如查询出来的内容为：
-
-```bash
-E: ID_MODEL_ID=7523
-E: ID_VENDOR_ID=1a86
-```
-
-在 `/etc/udev/rules.d/99-alohamini-rplidar-c1.rules`追加一行，绑定imu规则
-
-```bash
-sudo nano /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
-```
-
-粘贴以下内容，idVendor与idProduct替换成查询到的数字，将第一步ID_MODEL_ID值填入idProduct，将ID_VENDOR_ID填入idVendor
-
-```bash
-SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{idVendor}=="idVendor", ATTRS{idProduct}=="idProduct", MODE:="0660", GROUP="dialout", SYMLINK+="imu"
-```
-
-修改规则后重新加载并触发：
-
-```bash
-sudo usermod -aG dialout "$USER"  
-# 当前用户尚未在 dialout 组时执行，重新登录后生效
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
 
 ## 首次检查
 
