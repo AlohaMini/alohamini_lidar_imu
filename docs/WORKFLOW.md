@@ -99,6 +99,22 @@ ros2 launch alohamini_bringup rviz.launch.py
 2. `LaserScan -> Topic` 设置为 `/scan`。
 3. 暂时关闭 `Map`、`RobotModel` 和 `Scan Sector` 显示。
 
+### 独立测试IMU
+
+将 IMU 插入运行驱动的树莓派或 PC，按 [IMU 说明](../ros2_ws/src/alohamini_imu/README.md)
+安装 `python3-serial` 并编译 `alohamini_imu`。在相应 Humble 容器中执行，设备路径以实物为准：
+
+```bash
+source /opt/ros/humble/setup.bash
+source /root/ws/install/setup.bash
+ros2 launch alohamini_imu test_imu.launch.py serial_port:=/dev/ttyUSB0
+```
+
+启动时读取实际量程和输出速率，每秒显示加速度、角速度、姿态、频率和数据年龄；
+新运动帧中断时测试会报错结束。另开终端可执行 `ros2 topic echo /imu/data_raw --once`。
+先检查静止重力模长约 9.81 m/s²、角速度接近零，再手动转动验证轴向和正负号。
+本入口只读 IMU，融合到建图／导航的工作另见 [融合方案](IMU_FUSION_PLAN.md)。
+
 ## 3. 在树莓派启动 SLAM 建图
 
 建图命令应在树莓派的 `alohamini_nav2` 容器内执行。推荐使用带键盘控制和地图保存

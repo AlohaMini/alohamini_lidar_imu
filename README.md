@@ -2,6 +2,8 @@
 
 本项目使用树莓派直接连接思岚 RPLIDAR C1，通过 ROS 2 发布激光数据，并提供
 底盘控制、SLAM 建图、Nav2 导航和 RViz 启动入口。
+幻尔十轴 IMU 的 USB 独立读取与验证入口已提供，见
+[IMU 使用说明](ros2_ws/src/alohamini_imu/README.md)。
 
 ## 目录
 
@@ -9,6 +11,7 @@
 alohamini_lidar_imu/
 ├── ros2_ws/src/
 │   ├── alohamini_rplidar_c1/      # C1 ROS 2 驱动、完整内置 Slamtec SDK、扫描测试
+│   ├── alohamini_imu/             # 幻尔十轴 USB IMU 读取、单位换算和数据验证
 │   ├── alohamini_description/     # 机器人模型和 laser_frame TF
 │   ├── alohamini_base_control/    # ros2_control 底盘驱动
 │   ├── alohamini_nav_bridge/      # 可选 ZMQ 底盘桥

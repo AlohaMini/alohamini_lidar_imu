@@ -103,7 +103,12 @@ apt install -y --no-install-recommends \
   ros-humble-rmw-fastrtps-cpp libopencv-dev \
   ros-humble-ament-cmake-google-benchmark ros-humble-ament-lint-common \
   ros-humble-ament-cmake-gtest ros-humble-ament-cmake-gen-version-h \
-  python3-colcon-common-extensions python3-zmq iproute2 iputils-ping net-tools
+  python3-colcon-common-extensions python3-zmq python3-serial iproute2 iputils-ping net-tools \
+  ros-humble-cv-bridge \
+  ros-humble-transmission-interface ros-humble-pluginlib \
+  ros-humble-tf2-geometry-msgs ros-humble-imu-tools ros-humble-diagnostic-updater \
+  ros-humble-rosbag2 python3-rosdep
+
 ```
 
 构建工作空间：
@@ -283,6 +288,43 @@ ros2 launch alohamini_bringup mapping_ros2_control.launch.py \
 ```
 
 如果尚未安装 udev 规则，仍可直接使用默认的 `/dev/ttyUSB0`。
+
+### 配置 `/dev/imu` udev 别名
+
+只连接imu，用以下命令查询信息
+
+```bash
+udevadm info --query=all --name=/dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+```
+
+假如查询出来的内容为：
+
+```bash
+E: ID_MODEL_ID=7523
+E: ID_VENDOR_ID=1a86
+```
+
+在 `/etc/udev/rules.d/99-alohamini-rplidar-c1.rules`追加一行，绑定imu规则
+
+```bash
+sudo nano /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
+```
+
+粘贴以下内容，idVendor与idProduct替换成查询到的数字，将第一步ID_MODEL_ID值填入idProduct，将ID_VENDOR_ID填入idVendor
+
+```bash
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", ATTRS{idVendor}=="idVendor", ATTRS{idProduct}=="idProduct", MODE:="0660", GROUP="dialout", SYMLINK+="imu"
+```
+
+修改规则后重新加载并触发：
+
+```bash
+sudo usermod -aG dialout "$USER"  
+# 当前用户尚未在 dialout 组时执行，重新登录后生效
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 
 ## 首次检查
 
