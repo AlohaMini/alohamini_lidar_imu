@@ -77,7 +77,6 @@ sudo cp ~/alohamini_lidar_imu/ros2_ws/src/alohamini_rplidar_c1/udev/99-alohamini
   /etc/udev/rules.d/99-alohamini-rplidar-c1.rules
 ```
 
-模板按 `lerobot_alohamini` 中 leader 臂的方式使用 USB 唯一序列号匹配，避免
 多个相同 USB 转串口设备之间串线。先读取 C1 序列号：
 
 ```bash
@@ -102,9 +101,8 @@ sudo usermod -aG dialout "$USER"
 # 当前用户尚未在 dialout 组时执行，重新登录后生效
 sudo udevadm control --reload-rules
 sudo udevadm trigger
-# 最可靠的做法是拔下并重新插入 C1 USB 线
+# 查询雷达别名是否生效
 ls -l /dev/lidar_c1
-readlink -f /dev/lidar_c1
 ```
 
 确认别名指向 C1 后，单独测试和完整 bringup 都传入同一个参数：

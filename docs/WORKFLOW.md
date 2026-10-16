@@ -110,10 +110,9 @@ source /root/ws/install/setup.bash
 ros2 launch alohamini_imu test_imu.launch.py serial_port:=/dev/ttyUSB0
 ```
 
-启动时读取实际量程和输出速率，每秒显示加速度、角速度、姿态、频率和数据年龄；
+启动时读取实际量程和输出速率，每秒显示加速度、角速度、姿态、频率和数据实效性；
 新运动帧中断时测试会报错结束。另开终端可执行 `ros2 topic echo /imu/data_raw --once`。
 先检查静止重力模长约 9.81 m/s²、角速度接近零，再手动转动验证轴向和正负号。
-本入口只读 IMU，融合到建图／导航的工作另见 [融合方案](IMU_FUSION_PLAN.md)。
 
 ## 3. 在树莓派启动 SLAM 建图
 
